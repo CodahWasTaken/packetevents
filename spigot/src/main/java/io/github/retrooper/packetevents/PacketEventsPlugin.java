@@ -41,20 +41,20 @@ public class PacketEventsPlugin extends JavaPlugin {
     public void onLoad() {
         ownApi = SpigotPacketEventsBuilder.build(this);
         PacketEvents.setAPI(ownApi);
+        // Apply our defaults here, not in onEnable. SpigotPacketEventsBuilder caches its instance in
+        // a static, so a consumer that shares these classes (GrimAC in a "lite" build) gets this very
+        // object back from build() and configures it during its own onLoad. Bukkit runs every onLoad
+        // before any onEnable, so defaults applied in onEnable would land last and silently undo the
+        // settings that consumer deliberately chose - GrimAC sets reEncodeByDefault(false) and
+        // checkForUpdates(false). Setting them here lets the consumer have the final word.
+        PacketEvents.getAPI().getSettings().debug(false).checkForUpdates(true).timeStampMode(TimeStampMode.MILLIS).reEncodeByDefault(true);
         PacketEvents.getAPI().load();
     }
 
     @Override
     public void onEnable() {
         //Register your listeners
-        // A consumer built against this fork (GrimAC in a "lite" build) replaces the shared API with
-        // its own configured instance during its onLoad, which Bukkit runs before any onEnable.
-        // Applying our defaults unconditionally here would overwrite settings it deliberately chose
-        // - notably reEncodeByDefault(false) and checkForUpdates(false) - so only configure the
-        // instance we still own. init() is idempotent, so it is always safe to call.
-        if (PacketEvents.getAPI() == ownApi) {
-            PacketEvents.getAPI().getSettings().debug(false).checkForUpdates(true).timeStampMode(TimeStampMode.MILLIS).reEncodeByDefault(true);
-        }
+        // Settings are applied in onLoad so consumers can override them; see the note there.
         PacketEvents.getAPI().init();
 
         SimplePacketListenerAbstract listener = new SimplePacketListenerAbstract(PacketListenerPriority.HIGH) {
