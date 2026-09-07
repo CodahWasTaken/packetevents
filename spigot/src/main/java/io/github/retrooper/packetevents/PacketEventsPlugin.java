@@ -19,6 +19,7 @@
 package io.github.retrooper.packetevents;
 
 import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.PacketEventsAPI;
 import com.github.retrooper.packetevents.event.*;
 import com.github.retrooper.packetevents.event.simple.*;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
@@ -33,16 +34,27 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class PacketEventsPlugin extends JavaPlugin {
+    /** The instance this plugin created, so it can tell whether it still owns the shared API. */
+    private PacketEventsAPI<?> ownApi;
+
     @Override
     public void onLoad() {
-        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
+        ownApi = SpigotPacketEventsBuilder.build(this);
+        PacketEvents.setAPI(ownApi);
         PacketEvents.getAPI().load();
     }
 
     @Override
     public void onEnable() {
         //Register your listeners
-        PacketEvents.getAPI().getSettings().debug(false).checkForUpdates(true).timeStampMode(TimeStampMode.MILLIS).reEncodeByDefault(true);
+        // A consumer built against this fork (GrimAC in a "lite" build) replaces the shared API with
+        // its own configured instance during its onLoad, which Bukkit runs before any onEnable.
+        // Applying our defaults unconditionally here would overwrite settings it deliberately chose
+        // - notably reEncodeByDefault(false) and checkForUpdates(false) - so only configure the
+        // instance we still own. init() is idempotent, so it is always safe to call.
+        if (PacketEvents.getAPI() == ownApi) {
+            PacketEvents.getAPI().getSettings().debug(false).checkForUpdates(true).timeStampMode(TimeStampMode.MILLIS).reEncodeByDefault(true);
+        }
         PacketEvents.getAPI().init();
 
         SimplePacketListenerAbstract listener = new SimplePacketListenerAbstract(PacketListenerPriority.HIGH) {
@@ -103,6 +115,9 @@ public class PacketEventsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        PacketEvents.getAPI().terminate();
+        // Only tear down an instance we own; another plugin's instance is its to terminate.
+        if (PacketEvents.getAPI() == ownApi && ownApi != null) {
+            PacketEvents.getAPI().terminate();
+        }
     }
 }
